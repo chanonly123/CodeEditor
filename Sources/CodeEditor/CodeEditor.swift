@@ -241,6 +241,7 @@ public struct CodeEditor: View {
               inset          : CGSize?                       = nil,
               allowsUndo     : Bool                          = true,
               autoscroll     : Bool                          = true,
+              disableScroll  : Bool                          = false,
               backgroundColor: NSColor?                      = nil)
   {
     self.source           = source
@@ -256,6 +257,7 @@ public struct CodeEditor: View {
                          ?? [:]
     self.allowsUndo       = allowsUndo
     self.autoscroll       = autoscroll
+    self.disableScroll    = disableScroll
     self.backgroundColor  = backgroundColor
   }
   
@@ -294,6 +296,7 @@ public struct CodeEditor: View {
               autoPairs      : [ String : String ]? = nil,
               inset          : CGSize?              = nil,
               allowsUndo     : Bool                 = true,
+              disableScroll  : Bool                 = false,
               backgroundColor: NSColor?             = nil)
   {
     assert(!flags.contains(.editable), "Editing requires a Binding")
@@ -306,6 +309,7 @@ public struct CodeEditor: View {
               autoPairs      : autoPairs,
               inset          : inset,
               allowsUndo     : allowsUndo,
+              disableScroll  : disableScroll,
               backgroundColor: backgroundColor)
   }
   
@@ -320,6 +324,7 @@ public struct CodeEditor: View {
   private let inset            : CGSize
   private let allowsUndo       : Bool
   private let autoscroll       : Bool
+  private let disableScroll    : Bool
   private let backgroundColor  : NSColor?
 
   public var body: some View {
@@ -333,7 +338,8 @@ public struct CodeEditor: View {
                                 autoPairs      : autoPairs,
                                 inset          : inset,
                                 allowsUndo     : allowsUndo,
-                                autoscroll     : autoscroll,
+                                autoscroll     : autoscroll, 
+                                disableScroll  : disableScroll,
                                 backgroundColor: backgroundColor)
   }
 }

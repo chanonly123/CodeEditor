@@ -56,6 +56,7 @@ struct UXCodeTextViewRepresentable : UXViewRepresentable {
               inset          : CGSize,
               allowsUndo     : Bool,
               autoscroll     : Bool,
+              disableScroll  : Bool,
               backgroundColor: NSColor? = nil)
   {
     self.source                = source
@@ -69,6 +70,7 @@ struct UXCodeTextViewRepresentable : UXViewRepresentable {
     self.inset                 = inset
     self.allowsUndo            = allowsUndo
     self.autoscroll            = autoscroll
+    self.disableScroll         = disableScroll
     self.customBackgroundColor = backgroundColor
   }
     
@@ -84,6 +86,7 @@ struct UXCodeTextViewRepresentable : UXViewRepresentable {
   private let allowsUndo             : Bool
   private let autoPairs              : [ String : String ]
   private let autoscroll             : Bool
+  private let disableScroll          : Bool
 
   // The inner `value` is true, exactly when execution is inside
   // the `updateTextView(_:)` method. The `Coordinator` can use this
@@ -98,7 +101,25 @@ struct UXCodeTextViewRepresentable : UXViewRepresentable {
   public final class Coordinator: NSObject, UXCodeTextViewDelegate {
     
     var parent : UXCodeTextViewRepresentable
-    
+
+    var heightAnchor: NSLayoutConstraint!
+      var scrollHeightObs: NSKeyValueObservation?
+
+      func createHeightConstraint(scrollView: DisablableScrollView) {
+          scrollView.translatesAutoresizingMaskIntoConstraints = !parent.disableScroll
+          scrollView.isEnabledScroll = !parent.disableScroll
+          heightAnchor = scrollView.heightAnchor.constraint(equalToConstant: 1)
+          heightAnchor.isActive = parent.disableScroll
+          let textView = scrollView.documentView as! UXTextView
+
+          scrollHeightObs = textView.observe(\.frame, options: .new, changeHandler: { [weak self] view, _ in
+              guard let `self` = self else { return }
+              DispatchQueue.main.async {
+                  self.heightAnchor.constant = textView.contentSize.height + 50
+              }
+          })
+      }
+
     var fontSize : CGFloat? {
       set { if let value = newValue { parent.fontSize?.wrappedValue = value } }
       get { parent.fontSize?.wrappedValue }
@@ -238,7 +259,7 @@ struct UXCodeTextViewRepresentable : UXViewRepresentable {
   }
 
   #if os(macOS)
-    public func makeNSView(context: Context) -> NSScrollView {
+    public func makeNSView(context: Context) -> DisablableScrollView {
       let textView = UXCodeTextView()
       textView.customBackgroundColor = customBackgroundColor
       textView.autoresizingMask   = [ .width, .height ]
@@ -246,15 +267,15 @@ struct UXCodeTextViewRepresentable : UXViewRepresentable {
       textView.allowsUndo         = allowsUndo
       textView.textContainerInset = inset
 
-      let scrollView = NSScrollView()
+      let scrollView = DisablableScrollView()
       scrollView.hasVerticalScroller = true
       scrollView.documentView = textView
-      
+        context.coordinator.createHeightConstraint(scrollView: scrollView)
       updateTextView(textView)
       return scrollView
     }
     
-    public func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    public func updateNSView(_ scrollView: DisablableScrollView, context: Context) {
       guard let textView = scrollView.documentView as? UXCodeTextView else {
         assertionFailure("unexpected text view")
         return
@@ -329,7 +350,8 @@ struct UXCodeTextViewRepresentable_Previews: PreviewProvider {
                                 autoPairs   : [:],
                                 inset       : .init(width: 8, height: 8),
                                 allowsUndo  : true,
-                                autoscroll  : false)
+                                autoscroll  : false, 
+                                disableScroll: false)
       .frame(width: 200, height: 100)
     
     UXCodeTextViewRepresentable(source: .constant("let a = 5"),
@@ -342,7 +364,8 @@ struct UXCodeTextViewRepresentable_Previews: PreviewProvider {
                                 autoPairs   : [:],
                                 inset       : .init(width: 8, height: 8),
                                 allowsUndo  : true,
-                                autoscroll  : false)
+                                autoscroll  : false, 
+                                disableScroll: false)
       .frame(width: 200, height: 100)
     
     UXCodeTextViewRepresentable(
@@ -361,8 +384,45 @@ struct UXCodeTextViewRepresentable_Previews: PreviewProvider {
       autoPairs   : [:],
       inset       : .init(width: 8, height: 8),
       allowsUndo  : true,
-      autoscroll  : false
+      autoscroll  : false, 
+      disableScroll: false
     )
     .frame(width: 540, height: 200)
   }
 }
+
+#if os(macOS)
+class DisablableScrollView: NSScrollView {
+
+    @objc(enabled)
+    var isEnabledScroll: Bool = true
+
+    override func scrollWheel(with event: NSEvent) {
+        if isEnabledScroll {
+            super.scrollWheel(with: event)
+            verticalScrollElasticity = .none
+            horizontalScrollElasticity = .none
+        }
+        else {
+            nextResponder?.scrollWheel(with: event)
+            verticalScrollElasticity = .automatic
+            horizontalScrollElasticity = .automatic
+        }
+    }
+}
+
+extension NSTextView {
+
+    var contentSize: CGSize {
+        get {
+            guard let layoutManager = layoutManager, let textContainer = textContainer else {
+                print("textView no layoutManager or textContainer")
+                return .zero
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+            return layoutManager.usedRect(for: textContainer).size
+        }
+    }
+}
+#endif
